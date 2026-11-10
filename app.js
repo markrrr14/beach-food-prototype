@@ -32,10 +32,17 @@
     }
   ];
 
+  var SEED_REVIEWS = [
+    { orderId: 'seed-1', stallId: 'aling-rosa', name: 'Mika', stars: 5, text: 'The pork barbecue is smoky and sweet. Worth the wait!' },
+    { orderId: 'seed-2', stallId: 'aling-rosa', name: 'Paolo', stars: 4, text: 'Chicken inasal was juicy. Garlic rice could be more garlicky.' },
+    { orderId: 'seed-3', stallId: 'kuya-jun', name: 'Bea', stars: 5, text: 'Fresh kinilaw and the grilled squid was perfectly charred.' },
+    { orderId: 'seed-4', stallId: 'nena', name: 'Carlo', stars: 4, text: 'Halo-halo hit the spot after a hot day at the beach.' }
+  ];
+
   function initialState() {
     return {
-      screen: 'scan',
-      role: 'customer',
+      screen: 'role',
+      role: '',
       lang: 'en',
       payment: 'cash',
       readyAlert: 'none',
@@ -47,6 +54,12 @@
       myOrderId: 'A-27',
       serverCalled: false,
       orderSeq: 30,
+      vendor: null,
+      vendorStore: 'aling-rosa',
+      authMode: 'login',
+      reviewStars: 0,
+      reviewText: '',
+      reviews: SEED_REVIEWS.slice(),
       orders: [
         { id: 'A-28', table: 'Table 5 - Cottage 1', items: '3 \u00d7 Pork barbecue (2 sticks), 1 \u00d7 Garlic rice', status: 'received', stallId: 'aling-rosa', stallName: "Aling Rosa's Barbecue", receivedAt: '1:38 PM', payment: 'cash' },
         { id: 'A-29', table: 'Table 8 - Cottage', items: '1 \u00d7 Grilled liempo, 1 \u00d7 Chicken inasal', status: 'received', stallId: 'aling-rosa', stallName: "Aling Rosa's Barbecue", receivedAt: '1:40 PM', payment: 'gcash' },
@@ -162,11 +175,38 @@
     return h + ':' + (m < 10 ? '0' : '') + m + ' ' + ap;
   }
 
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function stallReviews(stallId) {
+    return state.reviews.filter(function (r) { return r.stallId === stallId; });
+  }
+  function stallRating(stallId) {
+    var list = stallReviews(stallId);
+    if (!list.length) return null;
+    var sum = 0;
+    list.forEach(function (r) { sum += r.stars; });
+    return { avg: sum / list.length, count: list.length };
+  }
+  function starGlyphs(n) {
+    var filled = Math.round(n), out = '';
+    for (var i = 1; i <= 5; i++) out += i <= filled ? '\u2605' : '\u2606';
+    return out;
+  }
+  function findReview(orderId) {
+    for (var i = 0; i < state.reviews.length; i++) if (state.reviews[i].orderId === orderId) return state.reviews[i];
+    return null;
+  }
+
   var pendingAdd = null;
 
   function go(screen) {
     state.screen = screen;
-    if (screen === 'vendor' || screen === 'vendormenu' || screen === 'vendorseats') state.role = 'vendor';
+    if (screen === 'role') state.role = '';
+    else if (screen === 'vendorauth' || screen === 'vendorstore' || screen === 'vendor' || screen === 'vendormenu' || screen === 'vendorseats') state.role = 'vendor';
     else if (screen !== 'help') state.role = 'customer';
     document.querySelectorAll('.screen-view').forEach(function (el) { el.classList.remove('active'); });
     document.getElementById('screen-' + screen).classList.add('active');
@@ -174,6 +214,76 @@
     if (sc) sc.scrollTop = 0;
     if (screen === 'tracking' && state.readyAlert === 'pending') showReadyAlert(state.myOrderId);
     render();
+  }
+
+  function chooseRole(role) {
+    if (role === 'customer') {
+      state.role = 'customer';
+      go('scan');
+      return;
+    }
+    state.role = 'vendor';
+    if (state.vendor && state.vendor.loggedIn) go('vendorstore');
+    else go('vendorauth');
+  }
+
+  function goVendor() { chooseRole('vendor'); }
+
+  function showAuthError(msg) {
+    var el = document.getElementById('auth-error');
+    el.textContent = msg;
+    el.classList.add('show');
+  }
+
+  function setAuthMode(mode) {
+    state.authMode = mode;
+    var err = document.getElementById('auth-error');
+    err.classList.remove('show');
+    err.textContent = '';
+    renderAuth();
+  }
+
+  function submitAuth() {
+    var signup = state.authMode === 'signup';
+    var name = (document.getElementById('auth-name').value || '').trim();
+    var email = (document.getElementById('auth-email').value || '').trim();
+    var pass = document.getElementById('auth-password').value || '';
+    var err = document.getElementById('auth-error');
+    err.classList.remove('show');
+
+    if (signup && !name) { showAuthError('Enter your store name.'); return; }
+    if (!email || email.indexOf('@') < 1 || email.indexOf('.') < 0) { showAuthError('Enter a valid email address.'); return; }
+    if (pass.length < 6) { showAuthError('Password must be at least 6 characters.'); return; }
+
+    if (signup) {
+      state.vendor = { loggedIn: true, name: name, email: email };
+      toast('Vendor account created. Welcome!');
+    } else {
+      var display = (state.vendor && state.vendor.name) ? state.vendor.name : email.split('@')[0];
+      state.vendor = { loggedIn: true, name: display, email: email };
+      toast('Welcome back, ' + display + '!');
+    }
+    document.getElementById('auth-password').value = '';
+    go('vendorstore');
+  }
+
+  function logoutVendor() {
+    state.vendor = null;
+    state.authMode = 'login';
+    try {
+      document.getElementById('auth-email').value = '';
+      document.getElementById('auth-password').value = '';
+      document.getElementById('auth-name').value = '';
+      document.getElementById('auth-error').classList.remove('show');
+    } catch (e) {}
+    go('vendorauth');
+    toast('Logged out of vendor account.');
+  }
+
+  function selectStore(id) {
+    state.vendorStore = id;
+    toast('Now selling from ' + stallById(id).name + '.');
+    go('vendor');
   }
 
   function backToMenu() { state.menuStall = state.cartStall; go('menu'); }
@@ -213,10 +323,10 @@
     var vEl = document.getElementById('flow-vendor');
     if (vEl) {
       var stage = 1;
-      var hasNew = state.orders.some(function (o) { return o.status === 'received' && o.isNew && o.stallId === 'aling-rosa'; });
+      var hasNew = state.orders.some(function (o) { return o.status === 'received' && o.isNew && o.stallId === state.vendorStore; });
       var oldest = null;
       state.orders.forEach(function (o) {
-        if (o.status === 'served' || o.stallId !== 'aling-rosa') return;
+        if (o.status === 'served' || o.stallId !== state.vendorStore) return;
         if (!oldest) oldest = o;
       });
       if (state.screen === 'vendorseats') stage = 5;
@@ -249,6 +359,34 @@
     render();
     var name = payName(id);
     toast(typeof t('toastPay') === 'function' ? t('toastPay')(name) : 'Paying with ' + name + '.');
+  }
+
+  function setReviewStars(n) {
+    state.reviewStars = n;
+    render();
+  }
+
+  function onReviewInput(el) {
+    state.reviewText = el.value;
+  }
+
+  function submitReview() {
+    var order = null;
+    for (var i = 0; i < state.orders.length; i++) if (state.orders[i].id === state.myOrderId) { order = state.orders[i]; break; }
+    if (!order) { toast('No order to review yet.'); return; }
+    if (!state.reviewStars) { toast('Pick a star rating first.'); return; }
+    if (findReview(order.id)) { toast('You already reviewed this order.'); return; }
+    state.reviews.push({
+      orderId: order.id,
+      stallId: order.stallId,
+      name: 'You',
+      stars: state.reviewStars,
+      text: (state.reviewText || '').trim()
+    });
+    state.reviewStars = 0;
+    state.reviewText = '';
+    render();
+    toast('Thanks for your review!');
   }
 
   function dismissVendorAlert() {
@@ -329,7 +467,7 @@
   }
 
   function changeSeats(d) {
-    var s = stallById('aling-rosa');
+    var s = stallById(state.vendorStore || 'aling-rosa');
     s.free = Math.max(0, Math.min(20, s.free + d));
     render();
   }
@@ -370,6 +508,8 @@
     state.serverCalled = false;
     state.readyAlert = 'none';
     state.vendorAlertDismissed = false;
+    state.reviewStars = 0;
+    state.reviewText = '';
     go('tracking');
     toast(typeof t('orderSent') === 'function' ? t('orderSent')(id) : 'Order ' + id + ' sent!');
   }
@@ -445,6 +585,12 @@
     var wrap = document.getElementById('stall-cards');
     wrap.innerHTML = stalls.map(function (s) {
       var info = seatInfo(s.free);
+      var rating = stallRating(s.id);
+      var ratingHtml = rating
+        ? '<div class="rating-line"><span class="stars">' + starGlyphs(rating.avg) + '</span>' +
+          '<strong>' + rating.avg.toFixed(1) + '</strong>' +
+          '<span>&middot; ' + rating.count + (rating.count === 1 ? ' review' : ' reviews') + '</span></div>'
+        : '<div class="rating-line"><span>No reviews yet</span></div>';
       return '<button class="card clickable" onclick="openStall(\'' + s.id + '\')">' +
         '<div class="card-photo ' + s.photoClass + '">' + s.emoji +
           '<span class="photo-label">' + s.photoLabel + '</span>' +
@@ -452,6 +598,7 @@
         '<div class="card-body">' +
           '<div class="card-title-row"><div class="card-title">' + s.name + '</div></div>' +
           '<div class="card-subtitle">' + s.sells + '</div>' +
+          ratingHtml +
           '<div class="seat-line ' + info.cls + '">' +
             '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M3 10h18v2H3v-2zm2-6h2v4H5V4zm12 0h2v4h-2V4zM7 12l-2 8h2l1-4h8l1 4h2l-2-8H7z"/></svg>' +
             '<span>' + info.text + '</span>' +
@@ -574,7 +721,7 @@
     }
 
     if (!order) {
-      document.getElementById('tracking-stall-name').textContent = 'Beachfront Food Court';
+      document.getElementById('tracking-stall-name').textContent = 'MaloroGo';
       body.innerHTML = '<div class="empty-state">' +
         '<svg width="44" height="44" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a6 6 0 0 0-6 6v3l-2 4h16l-2-4V8a6 6 0 0 0-6-6zm-2 16h4a2 2 0 0 1-4 0z"/></svg>' +
         '<div class="card-title">No orders yet</div>' +
@@ -650,6 +797,27 @@
       '</div>';
     });
     html += '</div>';
+
+    var myReview = findReview(order.id);
+    if (myReview) {
+      html += '<div class="review-card">' +
+        '<div class="review-title">Your review</div>' +
+        '<div class="rating-line" style="margin-top:0;"><span class="stars">' + starGlyphs(myReview.stars) + '</span><strong>' + myReview.stars + '.0</strong></div>' +
+        (myReview.text ? '<div class="review-item-text">' + esc(myReview.text) + '</div>' : '') +
+      '</div>';
+    } else if (status === 'ready' || status === 'served') {
+      var starsHtml = '';
+      for (var st = 1; st <= 5; st++) {
+        starsHtml += '<button class="star-btn' + (state.reviewStars >= st ? ' active' : '') + '" onclick="setReviewStars(' + st + ')" aria-label="' + st + ' star' + (st === 1 ? '' : 's') + '">\u2605</button>';
+      }
+      html += '<div class="review-card">' +
+        '<div class="review-title">Rate your food</div>' +
+        '<div class="review-sub">How was your order from ' + esc(order.stallName) + '?</div>' +
+        '<div class="review-stars">' + starsHtml + '</div>' +
+        '<textarea class="review-textarea" oninput="onReviewInput(this)" placeholder="Tell others what you loved (optional)">' + esc(state.reviewText) + '</textarea>' +
+        '<button class="btn btn-orange btn-block" onclick="submitReview()">Submit review</button>' +
+      '</div>';
+    }
     body.innerHTML = html;
 
     var btnLabel = state.serverCalled ? 'Server notified \u2713' : 'Need help? Call a server';
@@ -664,7 +832,7 @@
     var body = document.getElementById('help-body');
     var sub = document.getElementById('help-sub');
     if (state.role === 'vendor') {
-      sub.textContent = "Vendor \u00b7 Aling Rosa's Barbecue";
+      sub.textContent = "Vendor \u00b7 " + stallById(state.vendorStore || 'aling-rosa').name;
       body.innerHTML =
         '<div class="card"><div class="card-body">' +
           '<div class="card-title" style="font-size:16px;">Handling an order</div>' +
@@ -687,7 +855,7 @@
         '</div></div>' +
         '<button class="btn btn-grey btn-block" onclick="resetDemo()">Reset demo</button>';
     } else {
-      sub.textContent = 'Beachfront Food Court';
+      sub.textContent = 'MaloroGo';
       var callBtn = state.serverCalled
         ? '<button class="btn btn-grey btn-block" disabled>Server notified \u2713</button>'
         : '<button class="btn btn-orange btn-block" onclick="callServer()">Call a server to Table 12</button>';
@@ -717,12 +885,22 @@
   }
 
   function renderVendor() {
-    var aling = stallById('aling-rosa');
-    var info = seatInfo(aling.free);
+    var store = stallById(state.vendorStore || 'aling-rosa');
+    var info = seatInfo(store.free);
+    document.getElementById('vendor-store-name').textContent = store.name;
     document.getElementById('vendor-seats-label').textContent = 'Seats: ' + info.text;
-    document.getElementById('vendor-seats-count').textContent = aling.free;
+    document.getElementById('vendor-seats-count').textContent = store.free;
+    document.getElementById('vendor-store-chip').innerHTML =
+      '<div class="store-chip-text">' +
+        '<span class="store-chip-label">Selling from</span>' +
+        '<span class="store-chip-name">' + store.name + '</span>' +
+      '</div>' +
+      '<div style="display:flex;gap:6px;">' +
+        '<button class="store-chip-btn" onclick="go(\'vendorstore\')">Change store</button>' +
+        '<button class="store-chip-btn" onclick="logoutVendor()">Log out</button>' +
+      '</div>';
 
-    var active = state.orders.filter(function (o) { return o.status !== 'served'; });
+    var active = state.orders.filter(function (o) { return o.status !== 'served' && o.stallId === store.id; });
     var counts = { received: 0, accepted: 0, preparing: 0, ready: 0 };
     active.forEach(function (o) { if (counts[o.status] !== undefined) counts[o.status]++; });
     document.getElementById('count-received').textContent = counts.received;
@@ -786,8 +964,9 @@
   }
 
   function renderVendorMenu() {
-    var aling = stallById('aling-rosa');
-    document.getElementById('vendor-menu-list').innerHTML = aling.menu.map(function (m) {
+    var store = stallById(state.vendorStore || 'aling-rosa');
+    document.getElementById('vendormenu-note').textContent = store.name + ' \u00b7 toggle what is available today';
+    document.getElementById('vendor-menu-list').innerHTML = store.menu.map(function (m) {
       var sold = !!state.soldOut[m.id];
       return '<div class="vendor-item">' +
         '<div class="vendor-item-info">' +
@@ -802,12 +981,46 @@
   }
 
   function renderVendorSeats() {
-    var aling = stallById('aling-rosa');
-    var info = seatInfo(aling.free);
-    document.getElementById('seats-hero-count').textContent = aling.free;
+    var store = stallById(state.vendorStore || 'aling-rosa');
+    var info = seatInfo(store.free);
+    document.getElementById('seats-hero-label').textContent = 'Free seats at ' + store.name;
+    document.getElementById('seats-hero-count').textContent = store.free;
     var statusEl = document.getElementById('seats-hero-status');
     statusEl.className = 'seats-hero-status ' + info.cls;
     statusEl.textContent = info.word;
+  }
+
+  function renderAuth() {
+    var signup = state.authMode === 'signup';
+    document.getElementById('auth-heading').textContent = signup ? 'Create a vendor account' : 'Vendor login';
+    document.getElementById('auth-tab-login').classList.toggle('active', !signup);
+    document.getElementById('auth-tab-signup').classList.toggle('active', signup);
+    document.getElementById('auth-name-field').style.display = signup ? 'flex' : 'none';
+    document.getElementById('auth-submit').textContent = signup ? 'Create account' : 'Log in';
+    document.getElementById('auth-password').setAttribute('autocomplete', signup ? 'new-password' : 'current-password');
+    document.getElementById('auth-hint').innerHTML = signup
+      ? 'You will choose your store right after signing up.'
+      : 'Demo account: <strong>vendor@malorogo.com</strong> &middot; <strong>123456</strong>';
+  }
+
+  function renderVendorStore() {
+    var hello = document.getElementById('store-hello');
+    var vendorName = state.vendor && state.vendor.name ? state.vendor.name : 'Vendor';
+    hello.textContent = 'Welcome, ' + vendorName;
+    var wrap = document.getElementById('vendor-store-list');
+    wrap.innerHTML = stalls.map(function (s) {
+      var current = s.id === state.vendorStore;
+      return '<button class="store-option' + (current ? ' current' : '') + '" onclick="selectStore(\'' + s.id + '\')">' +
+        '<span class="store-option-photo ' + s.photoClass + '">' + s.emoji + '</span>' +
+        '<span class="store-option-info">' +
+          '<span class="store-option-name">' + s.name + '</span>' +
+          '<span class="store-option-sub">' + s.sells + '</span>' +
+        '</span>' +
+        (current
+          ? '<span class="store-option-badge">Current</span>'
+          : '<span class="role-arrow">&rarr;</span>') +
+      '</button>';
+    }).join('');
   }
 
   function renderOnboard() {
@@ -831,6 +1044,8 @@
     renderNavs();
     renderFlow();
     renderOnboard();
+    renderAuth();
+    renderVendorStore();
     renderStalls();
     renderMenu();
     renderCart();

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Beach Food Ordering App</title>
+<title>MaloroGo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@700;800&family=Figtree:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -16,7 +16,7 @@
   <!-- Splash screen -->
   <div class="splash" id="splash">
     <div class="splash-badge">🏖️</div>
-    <div class="splash-title">Beachfront Food Court</div>
+    <div class="splash-title">MaloroGo</div>
     <div class="splash-sub">Order from your table. We bring it to you.</div>
     <div class="splash-loader"><div class="splash-loader-fill"></div></div>
     <div class="splash-wave">
@@ -25,12 +25,44 @@
     </div>
   </div>
 
-  <!-- Customer flow step 1: Scan QR -->
-  <div class="screen-view active" id="screen-scan">
+  <!-- Role selection -->
+  <div class="screen-view active" id="screen-role">
     <header class="header-teal">
       <div class="header-top">
         <div>
-          <div class="header-eyebrow">Beachfront Food Court</div>
+          <div class="header-eyebrow">MaloroGo</div>
+          <div class="subheading">How are you using MaloroGo?</div>
+        </div>
+      </div>
+    </header>
+    <div class="screen">
+      <div class="role-intro">Pick your role to get started. Customers can order right away &mdash; vendors sign in to manage a store.</div>
+      <button class="role-card" onclick="chooseRole('customer')">
+        <span class="role-icon customer">🍽️</span>
+        <span class="role-info">
+          <span class="role-title">I'm a customer</span>
+          <span class="role-sub">Browse stalls, order food, and leave a review.</span>
+        </span>
+        <span class="role-arrow">&rarr;</span>
+      </button>
+      <button class="role-card vendor" onclick="chooseRole('vendor')">
+        <span class="role-icon vendor">🧑‍🍳</span>
+        <span class="role-info">
+          <span class="role-title">I'm a vendor</span>
+          <span class="role-sub">Log in or sign up to manage your store.</span>
+        </span>
+        <span class="role-arrow">&rarr;</span>
+      </button>
+      <div class="role-note">Vendor accounts are required for vendors only. Customers do not need to log in.</div>
+    </div>
+  </div>
+
+  <!-- Customer flow step 1: Scan QR -->
+  <div class="screen-view" id="screen-scan">
+    <header class="header-teal">
+      <div class="header-top">
+        <div>
+          <div class="header-eyebrow">MaloroGo</div>
           <div class="subheading" id="scan-title">Scan your table's QR code</div>
         </div>
       </div>
@@ -99,7 +131,7 @@
     <header class="header-teal">
       <div class="header-top">
         <div>
-          <div class="header-eyebrow">Beachfront Food Court</div>
+          <div class="header-eyebrow">MaloroGo</div>
           <div class="subheading" id="stalls-q">What would you like to eat?</div>
         </div>
       </div>
@@ -114,7 +146,7 @@
         </div>
       </div>
       <div id="stall-cards" style="display:flex;flex-direction:column;gap:14px;"></div>
-      <button class="demo-link" onclick="go('vendor')">Vendor screen (demo) &rarr;</button>
+      <button class="demo-link" onclick="goVendor()">Vendor login (demo) &rarr;</button>
     </div>
     <nav class="bottom-nav" id="nav-stalls"></nav>
   </div>
@@ -202,7 +234,7 @@
   <div class="screen-view" id="screen-help">
     <header class="header-teal">
       <div class="subheading">Help</div>
-      <div class="header-note" id="help-sub">Beachfront Food Court</div>
+      <div class="header-note" id="help-sub">MaloroGo</div>
     </header>
     <div class="screen">
       <div id="help-body" style="display:flex;flex-direction:column;gap:14px;"></div>
@@ -216,7 +248,7 @@
       <div class="header-top">
         <div>
           <div class="header-eyebrow">Vendor</div>
-          <div class="subheading">Aling Rosa's Barbecue</div>
+          <div class="subheading" id="vendor-store-name">Aling Rosa's Barbecue</div>
         </div>
       </div>
       <button class="header-back" onclick="go('stalls')">
@@ -226,6 +258,7 @@
     </header>
     <div class="screen">
       <div class="flow-steps" id="flow-vendor"></div>
+      <div class="store-chip" id="vendor-store-chip"></div>
       <div id="vendor-alert-wrap"></div>
       <div class="seats-control">
         <div class="seats-info">
@@ -257,7 +290,7 @@
         Orders
       </button>
       <div class="subheading">Menu</div>
-      <div class="header-note">Aling Rosa's Barbecue &middot; toggle what is available today</div>
+      <div class="header-note" id="vendormenu-note">Aling Rosa's Barbecue &middot; toggle what is available today</div>
     </header>
     <div class="screen">
       <div id="vendor-menu-list" style="display:flex;flex-direction:column;gap:12px;"></div>
@@ -277,7 +310,7 @@
     </header>
     <div class="screen">
       <div class="seats-hero">
-        <div class="seats-hero-label">Free seats at Aling Rosa's Barbecue</div>
+        <div class="seats-hero-label" id="seats-hero-label">Free seats at Aling Rosa's Barbecue</div>
         <div class="seats-hero-value" id="seats-hero-count">4</div>
         <div class="seats-hero-status available" id="seats-hero-status">Available</div>
         <div class="seats-hero-buttons">
@@ -297,6 +330,59 @@
       </div>
     </div>
     <nav class="bottom-nav" id="nav-vendorseats"></nav>
+  </div>
+
+  <!-- Vendor login / sign up -->
+  <div class="screen-view" id="screen-vendorauth">
+    <header class="header-teal">
+      <button class="header-back" onclick="go('role')">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+        Back
+      </button>
+      <div class="header-eyebrow">MaloroGo for vendors</div>
+      <div class="subheading" id="auth-heading">Vendor login</div>
+      <div class="header-note">Vendor accounts only. Customers can order without signing in.</div>
+    </header>
+    <div class="screen">
+      <div class="auth-tabs">
+        <button class="auth-tab active" id="auth-tab-login" onclick="setAuthMode('login')">Log in</button>
+        <button class="auth-tab" id="auth-tab-signup" onclick="setAuthMode('signup')">Sign up</button>
+      </div>
+      <div class="auth-card">
+        <div class="field" id="auth-name-field" style="display:none;">
+          <label for="auth-name">Store name</label>
+          <input id="auth-name" class="input" type="text" placeholder="e.g. Aling Rosa's Barbecue" autocomplete="organization" />
+        </div>
+        <div class="field">
+          <label for="auth-email">Email</label>
+          <input id="auth-email" class="input" type="email" placeholder="you@malorogo.com" autocomplete="email" />
+        </div>
+        <div class="field">
+          <label for="auth-password">Password</label>
+          <input id="auth-password" class="input" type="password" placeholder="At least 6 characters" autocomplete="current-password" />
+        </div>
+        <div class="auth-error" id="auth-error"></div>
+        <button class="btn btn-orange btn-block" id="auth-submit" onclick="submitAuth()">Log in</button>
+        <div class="auth-hint" id="auth-hint">Demo account: vendor@malorogo.com &middot; 123456</div>
+      </div>
+      <button class="demo-link" onclick="chooseRole('customer')">Continue as a customer instead &rarr;</button>
+    </div>
+  </div>
+
+  <!-- Vendor store selection -->
+  <div class="screen-view" id="screen-vendorstore">
+    <header class="header-teal">
+      <button class="header-back" onclick="logoutVendor()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+        Log out
+      </button>
+      <div class="header-eyebrow" id="store-hello">Welcome</div>
+      <div class="subheading">Choose the store you sell from</div>
+      <div class="header-note">Pick your stall. You can switch stores later from your dashboard.</div>
+    </header>
+    <div class="screen">
+      <div class="store-list" id="vendor-store-list"></div>
+    </div>
   </div>
 
   <!-- Confirm order sheet -->
